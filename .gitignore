@@ -23,3 +23,5 @@ sw/build/
 # 系统文件
 .DS_Store
 Thumbs.db
+riscv-tests-src/
+riscv-tests-build/build/
