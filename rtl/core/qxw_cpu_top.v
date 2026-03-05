@@ -147,6 +147,12 @@ module qxw_cpu_top (
             md_started_r <= 1'b1;
     end
 
+    // 除法启动周期需要立即 stall 整条流水线（md_busy 要到下一拍才拉高），
+    // 否则除法指令会在 ID/EX 被覆盖。乘法和除零不需要额外 stall。
+    wire div_start_stall = md_start_pulse
+                           & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_data);
+    wire md_stall = md_busy | div_start_stall;
+
     // ================================================================
     // 模块实例化
     // ================================================================
@@ -219,6 +225,7 @@ module qxw_cpu_top (
         .rst_n            (rst_n),
         .stall            (stall_id),
         .flush            (flush_id_ex),
+        .hold             (stall_ex),
         .if_id_pc         (if_id_pc),
         .if_id_inst       (if_id_inst),
         .if_id_pred_taken (if_id_pred_taken),
@@ -446,7 +453,7 @@ module qxw_cpu_top (
         .id_ex_mem_re      (id_ex_mem_re),
         .id_ex_valid       (id_ex_valid),
         .branch_mispredict (branch_mispredict),
-        .md_busy           (md_busy),
+        .md_busy           (md_stall),
         .trap              (csr_trap),
         .mret              (id_ex_mret & id_ex_valid),
         .stall_if          (stall_if),

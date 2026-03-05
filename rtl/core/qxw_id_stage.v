@@ -7,6 +7,7 @@ module qxw_id_stage (
     input  wire              rst_n,
     input  wire              stall,
     input  wire              flush,
+    input  wire              hold,   // 完全保持（EX 阶段 stall 时使用，区别于 bubble 插入）
 
     // IF/ID 级间寄存器输入
     input  wire [`XLEN_BUS]  if_id_pc,
@@ -267,8 +268,8 @@ module qxw_id_stage (
             id_ex_pred_taken  <= 1'b0;
             id_ex_pred_target <= 32'd0;
             id_ex_valid       <= 1'b0;
-        end else if (stall) begin
-            // 插入 bubble：清除控制信号但保持数据
+        end else if (stall && !hold) begin
+            // Load-Use bubble：清除控制信号但保持数据
             id_ex_reg_we      <= 1'b0;
             id_ex_mem_re      <= 1'b0;
             id_ex_mem_we      <= 1'b0;
@@ -279,7 +280,7 @@ module qxw_id_stage (
             id_ex_mret        <= 1'b0;
             id_ex_is_muldiv   <= 1'b0;
             id_ex_valid       <= 1'b0;
-        end else begin
+        end else if (!stall) begin
             id_ex_pc          <= if_id_pc;
             id_ex_rs1_data    <= rs1_data;
             id_ex_rs2_data    <= rs2_data;

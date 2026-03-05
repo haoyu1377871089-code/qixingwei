@@ -33,7 +33,7 @@ module tb_cpu_top;
     wire [31:0] tohost = u_soc.u_dmem.mem[12'hFFE];
 
     // 最大仿真周期
-    parameter MAX_CYCLES = 2_000_000;
+    parameter MAX_CYCLES = 10_000_000;
     integer cycle_cnt;
 
     // 复位 + 运行
@@ -69,10 +69,12 @@ module tb_cpu_top;
         $finish;
     end
 
-    // 波形输出
+    // 波形输出（可通过 +DUMP 命令行参数启用）
     initial begin
-        $dumpfile("tb_cpu_top.vcd");
-        $dumpvars(0, tb_cpu_top);
+        if ($test$plusargs("DUMP")) begin
+            $dumpfile("tb_cpu_top.vcd");
+            $dumpvars(0, tb_cpu_top);
+        end
     end
 
     // 监控所有 RAM 写入，最后 200 周期
@@ -96,7 +98,6 @@ module tb_cpu_top;
     end
     `endif
 
-    // 定期打印 PC（调试用）
     `ifdef DEBUG_TRACE
     always @(posedge clk) begin
         if (rst_n && u_soc.u_cpu.u_wb_stage.rf_we)
@@ -105,6 +106,29 @@ module tb_cpu_top;
                      u_soc.u_cpu.mem_wb_pc,
                      u_soc.u_cpu.u_wb_stage.rf_wa,
                      u_soc.u_cpu.u_wb_stage.rf_wd);
+    end
+    // 跟踪除法相关信号（连续 5 拍）
+    reg [3:0] div_trace_cnt;
+    initial div_trace_cnt = 0;
+    always @(posedge clk) begin
+        if (rst_n && u_soc.u_cpu.md_start_pulse)
+            div_trace_cnt <= 5;
+        else if (div_trace_cnt > 0)
+            div_trace_cnt <= div_trace_cnt - 1;
+
+        if (div_trace_cnt > 0 || (rst_n && u_soc.u_cpu.md_start_pulse))
+            $display("[%0t] DIV: stall_id=%b stall_ex=%b busy=%b pulse=%b started_r=%b is_md=%b valid=%b ex_mem_we=%b md_result=%08h div_q=%08h",
+                     $time,
+                     u_soc.u_cpu.stall_id,
+                     u_soc.u_cpu.stall_ex,
+                     u_soc.u_cpu.md_busy,
+                     u_soc.u_cpu.md_start_pulse,
+                     u_soc.u_cpu.md_started_r,
+                     u_soc.u_cpu.u_ex_stage.id_ex_is_muldiv,
+                     u_soc.u_cpu.u_ex_stage.id_ex_valid,
+                     u_soc.u_cpu.u_ex_stage.ex_mem_reg_we,
+                     u_soc.u_cpu.md_result,
+                     u_soc.u_cpu.u_muldiv.div_result_q);
     end
     `endif
 

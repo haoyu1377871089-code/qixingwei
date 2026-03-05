@@ -24,9 +24,11 @@ COREMARK_DIR = coremark
 # 库源文件（syscalls、printf、coremark_port）
 LIB_SRC = $(LIB_DIR)/syscalls.c $(LIB_DIR)/printf.c $(LIB_DIR)/coremark_port.c
 
-# 默认目标：编译所有测试
-TESTS = $(wildcard $(TEST_DIR)/*.S)
-TEST_HEXS = $(patsubst $(TEST_DIR)/%.S, $(BUILD_DIR)/%.hex, $(TESTS))
+# 默认目标：编译所有测试（汇编 + C）
+TESTS_S = $(wildcard $(TEST_DIR)/*.S)
+TESTS_C = $(wildcard $(TEST_DIR)/*.c)
+TEST_HEXS = $(patsubst $(TEST_DIR)/%.S, $(BUILD_DIR)/%.hex, $(TESTS_S)) \
+            $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/%.hex, $(TESTS_C))
 
 .PHONY: all clean firmware tests coremark
 
@@ -55,6 +57,10 @@ $(BUILD_DIR)/coremark.hex: $(BUILD_DIR)/coremark.elf
 # 通用规则：汇编测试 .S -> .elf -> .hex
 $(BUILD_DIR)/%.elf: $(TEST_DIR)/%.S start.S linker.ld | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ start.S $< -Wl,-T,linker.ld
+
+# 通用规则：C 测试 .c -> .elf -> .hex（链接库文件支持 putchar/printf 等）
+$(BUILD_DIR)/%.elf: $(TEST_DIR)/%.c start.S $(LIB_SRC) linker.ld | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ start.S $(LIB_SRC) $< -Wl,-T,linker.ld
 
 $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf
 	$(OBJCOPY) -O verilog $< $(BUILD_DIR)/$*_bytes.hex
