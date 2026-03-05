@@ -32,8 +32,12 @@ module tb_cpu_top;
     // 对应 DMEM word_addr = (0x3FF8 >> 2) = 0xFFE
     wire [31:0] tohost = u_soc.u_dmem.mem[12'hFFE];
 
-    // 最大仿真周期
+    // 最大仿真周期（可通过编译时 -DMAX_CYC=N 覆盖）
+`ifdef MAX_CYC
+    parameter MAX_CYCLES = `MAX_CYC;
+`else
     parameter MAX_CYCLES = 200_000;
+`endif
     integer cycle_cnt;
 
     // 复位 + 运行
@@ -106,6 +110,18 @@ module tb_cpu_top;
                      u_soc.u_cpu.mem_wb_pc,
                      u_soc.u_cpu.u_wb_stage.rf_wa,
                      u_soc.u_cpu.u_wb_stage.rf_wd);
+    end
+    always @(posedge clk) begin
+        if (rst_n && u_soc.u_cpu.u_ex_stage.is_branch)
+            $display("[%0t] BR: id_ex_pc=%08h br_type=%0d taken=%b mispredict=%b target=%08h fwd_rs1=%08h fwd_rs2=%08h",
+                     $time,
+                     u_soc.u_cpu.id_ex_pc,
+                     u_soc.u_cpu.u_ex_stage.id_ex_br_type,
+                     u_soc.u_cpu.branch_taken,
+                     u_soc.u_cpu.branch_mispredict,
+                     u_soc.u_cpu.branch_target,
+                     u_soc.u_cpu.fwd_rs1_data,
+                     u_soc.u_cpu.fwd_rs2_data);
     end
     // 跟踪除法相关信号（连续 5 拍）
     reg [3:0] div_trace_cnt;

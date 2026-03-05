@@ -22,9 +22,10 @@ module qxw_cpu_top (
     input  wire              clk,
     input  wire              rst_n,
 
-    // 指令存储器接口（哈佛架构指令端口）
-    // imem_addr 由 PC 寄存器驱动，imem_rdata 为组合读返回的 32 位指令
+    // 指令存储器接口（哈佛架构指令端口，BRAM 同步读）
+    // imem_addr 由 PC 寄存器驱动，imem_en 控制 BRAM 读使能
     output wire [`XLEN_BUS]  imem_addr,
+    output wire              imem_en,
     input  wire [`XLEN_BUS]  imem_rdata,
 
     // 数据存储器接口（经 SoC 总线路由到 RAM/外设）
@@ -158,14 +159,15 @@ module qxw_cpu_top (
     wire                 ex_mem_valid;
 
     // MEM/WB 级间寄存器：传递访存结果到写回级
-    // mem_data 为经过字节对齐和符号/零扩展后的 Load 数据
     // wb_sel 决定写回数据来源：ALU 结果 / MEM 数据 / PC+4 / CSR 旧值
+    // funct3/byte_offset 传递到 WB 阶段供 load 数据字节提取使用
     wire [`XLEN_BUS]     mem_wb_pc;
     wire [`XLEN_BUS]     mem_wb_alu_result;
-    wire [`XLEN_BUS]     mem_wb_mem_data;
     wire [`REG_ADDR_BUS] mem_wb_rd;
     wire                 mem_wb_reg_we;
     wire [`WB_SEL_BUS]   mem_wb_wb_sel;
+    wire [2:0]           mem_wb_funct3;
+    wire [1:0]           mem_wb_byte_offset;
     wire                 mem_wb_csr_we;
     wire [2:0]           mem_wb_csr_op;
     wire [11:0]          mem_wb_csr_addr;
@@ -244,8 +246,8 @@ module qxw_cpu_top (
         .stall         (stall_if),
         .branch_taken  (branch_taken),
         .branch_target (branch_target),
-        .pred_taken    (bpu_pred_taken & ~flush_if_id),  // 冲刷时忽略预测
-        .pred_target   (bpu_pred_target),
+        .pred_taken    (1'b0),  // BRAM 同步读模式下禁用 IF 阶段预测
+        .pred_target   (32'd0),
         .flush         (branch_mispredict),
         .flush_target  (branch_taken ? branch_target : (id_ex_pc + 32'd4)),  // 预测错时跳正确目标
         .trap          (csr_trap),
@@ -271,9 +273,8 @@ module qxw_cpu_top (
     );
 
     // --- 取指阶段 ---
-    // PC 直连 imem 地址端口，组合读取指令，同拍得到 imem_rdata
-    // IF 阶段同时从指令中提取 B-type 偏移量计算预测目标地址
-    // stall 时保持 IF/ID 级间寄存器不变，flush 时插入 NOP 气泡
+    // IMEM 使用 BRAM 同步读，地址在 T 拍采样，数据在 T+1 拍输出
+    // imem_en 控制 BRAM 读使能，stall 时 en=0 保持输出不变
     qxw_if_stage u_if_stage (
         .clk              (clk),
         .rst_n            (rst_n),
@@ -281,6 +282,7 @@ module qxw_cpu_top (
         .flush            (flush_if_id),
         .pc               (pc),
         .imem_addr        (imem_addr),
+        .imem_en          (imem_en),
         .imem_rdata       (imem_rdata),
         .bpu_idx          (bpu_pred_idx),
         .bpu_pred_taken   (bpu_pred_taken),
@@ -479,8 +481,8 @@ module qxw_cpu_top (
 
     // --- 访存阶段 ---
     // Store：将 rs2 数据按 funct3（SB/SH/SW）对齐并生成字节使能
-    // Load：从 dmem 返回的 32 位字中按 byte_offset 提取字节/半字，并做符号/零扩展
-    // dmem 使用组合读，地址由 ALU 结果（经字对齐）驱动，同拍获得数据
+    // DMEM 使用 BRAM 同步读，读数据在 WB 阶段才可用
+    // funct3/byte_offset 传递到 WB 阶段供 load 字节提取
     qxw_mem_stage u_mem_stage (
         .clk              (clk),
         .rst_n            (rst_n),
@@ -503,13 +505,13 @@ module qxw_cpu_top (
         .dmem_we          (dmem_we),
         .dmem_addr        (dmem_addr),
         .dmem_wdata       (dmem_wdata),
-        .dmem_rdata       (dmem_rdata),
         .mem_wb_pc        (mem_wb_pc),
         .mem_wb_alu_result(mem_wb_alu_result),
-        .mem_wb_mem_data  (mem_wb_mem_data),
         .mem_wb_rd        (mem_wb_rd),
         .mem_wb_reg_we    (mem_wb_reg_we),
         .mem_wb_wb_sel    (mem_wb_wb_sel),
+        .mem_wb_funct3    (mem_wb_funct3),
+        .mem_wb_byte_offset(mem_wb_byte_offset),
         .mem_wb_csr_we    (mem_wb_csr_we),
         .mem_wb_csr_op    (mem_wb_csr_op),
         .mem_wb_csr_addr  (mem_wb_csr_addr),
@@ -518,23 +520,21 @@ module qxw_cpu_top (
     );
 
     // --- 写回阶段 ---
-    // 根据 wb_sel 从四种来源中选择写回数据：
-    //   WB_SEL_ALU：算术/逻辑运算结果（ADD/SUB/AND/OR 等）
-    //   WB_SEL_MEM：Load 指令从内存读取的数据
-    //   WB_SEL_PC4：JAL/JALR 的返回地址（PC+4）
-    //   WB_SEL_CSR：CSR 读取的旧值（CSRRW/CSRRS/CSRRC 需要将旧值写回 rd）
+    // DMEM 同步读数据在 WB 阶段可用，load 字节提取在此完成
     qxw_wb_stage u_wb_stage (
-        .mem_wb_pc        (mem_wb_pc),
-        .mem_wb_alu_result(mem_wb_alu_result),
-        .mem_wb_mem_data  (mem_wb_mem_data),
-        .mem_wb_rd        (mem_wb_rd),
-        .mem_wb_reg_we    (mem_wb_reg_we),
-        .mem_wb_wb_sel    (mem_wb_wb_sel),
-        .mem_wb_valid     (mem_wb_valid),
-        .csr_rdata        (csr_rdata),
-        .rf_we            (rf_we),
-        .rf_wa            (rf_wa),
-        .rf_wd            (rf_wd)
+        .mem_wb_pc         (mem_wb_pc),
+        .mem_wb_alu_result (mem_wb_alu_result),
+        .mem_wb_rd         (mem_wb_rd),
+        .mem_wb_reg_we     (mem_wb_reg_we),
+        .mem_wb_wb_sel     (mem_wb_wb_sel),
+        .mem_wb_funct3     (mem_wb_funct3),
+        .mem_wb_byte_offset(mem_wb_byte_offset),
+        .mem_wb_valid      (mem_wb_valid),
+        .dmem_rdata_wb     (dmem_rdata),
+        .csr_rdata         (csr_rdata),
+        .rf_we             (rf_we),
+        .rf_wa             (rf_wa),
+        .rf_wd             (rf_wd)
     );
 
     // --- CSR 寄存器模块 ---

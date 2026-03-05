@@ -1,11 +1,14 @@
 # 仿真产物
 *.vvp
 *.vcd
-*.hex
-*.log
 
 # Vivado 工程产物
 fpga/scripts/output/
+fpga/scripts/.Xil/
+fpga/scripts/clockInfo.txt
+fpga/scripts/vivado.jou
+fpga/scripts/vivado.log
+fpga/scripts/firmware.hex
 *.bit
 *.dcp
 *.jou
@@ -19,6 +22,13 @@ sw/build/
 *.o
 *.d
 *.dis
+
+# riscv-tests 编译产物
+riscv-tests-build/build/
+
+# 仿真工作目录中的临时文件
+sim/firmware.hex
+sim/*.vvp
 
 # 系统文件
 .DS_Store

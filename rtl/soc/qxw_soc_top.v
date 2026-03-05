@@ -27,6 +27,7 @@ module qxw_soc_top #(
     // imem 接口：指令端口，直连 IMEM，不经过总线（哈佛架构）
     // dmem 接口：数据端口，经总线路由到 RAM/UART/Timer/ROM
     wire [31:0] cpu_imem_addr;
+    wire        cpu_imem_en;
     wire [31:0] cpu_imem_rdata;
 
     wire        cpu_dmem_en;
@@ -67,6 +68,7 @@ module qxw_soc_top #(
         .clk        (clk),
         .rst_n      (rst_n),
         .imem_addr  (cpu_imem_addr),
+        .imem_en    (cpu_imem_en),
         .imem_rdata (cpu_imem_rdata),
         .dmem_en    (cpu_dmem_en),
         .dmem_we    (cpu_dmem_we),
@@ -87,6 +89,7 @@ module qxw_soc_top #(
         .INIT_FILE(IMEM_INIT_FILE)
     ) u_imem (
         .clk   (clk),
+        .en    (cpu_imem_en),
         .addr  (cpu_imem_addr),
         .rdata (cpu_imem_rdata),
         .daddr (cpu_dmem_addr),
@@ -97,6 +100,8 @@ module qxw_soc_top #(
     // 总线
     // ================================================================
     qxw_bus u_bus (
+        .clk           (clk),
+        .rst_n         (rst_n),
         .cpu_dmem_en   (cpu_dmem_en),
         .cpu_dmem_we   (cpu_dmem_we),
         .cpu_dmem_addr (cpu_dmem_addr),
