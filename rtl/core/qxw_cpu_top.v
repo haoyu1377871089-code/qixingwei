@@ -189,6 +189,10 @@ module qxw_cpu_top (
     // BPU 预测目标（从 IF stage 内部计算）
     wire [`XLEN_BUS] bpu_pred_target;
 
+    // 当前取指的指令是否为 BRANCH 类型，用于过滤 BPU 预测
+    // 防止非分支指令被 BPU 错误重定向 PC
+    wire if_is_branch = (imem_rdata[6:0] == `OPCODE_BRANCH);
+
     // ================================================================
     // 乘除法启动脉冲生成与 stall 逻辑
     // ================================================================
@@ -244,7 +248,7 @@ module qxw_cpu_top (
         .stall         (stall_if),
         .branch_taken  (branch_taken),
         .branch_target (branch_target),
-        .pred_taken    (bpu_pred_taken & ~flush_if_id),  // 冲刷时忽略预测
+        .pred_taken    (if_is_branch & bpu_pred_taken & ~flush_if_id),  // 仅分支指令使用BPU预测
         .pred_target   (bpu_pred_target),
         .flush         (branch_mispredict),
         .flush_target  (branch_taken ? branch_target : (id_ex_pc + 32'd4)),  // 预测错时跳正确目标

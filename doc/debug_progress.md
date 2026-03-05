@@ -83,7 +83,7 @@ wire div_starting = md_start_pulse_in & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_dat
 | # | 任务 | 状态 |
 |---|------|------|
 | 1 | ~~修复除法结果抑制 bug~~ | ✅ 已修复（详见 Bug Fix 2 & 3） |
-| 2 | ~~CoreMark 编译运行~~ | ✅ 编译通过，仿真需 >10M 周期 |
+| 2 | ~~CoreMark 编译运行~~ | ✅ 编译通过，68923 cycles PASS |
 
 ### 待完成（需 Vivado）
 
@@ -93,14 +93,21 @@ wire div_starting = md_start_pulse_in & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_dat
 | 4 | 后仿真 | 综合后网表仿真 + 布线后时序仿真 |
 | 5 | 比特流文件 | 生成 .bit 文件 |
 
+### 已完成（仿真端）
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 6 | ~~riscv-tests 官方测试~~ | ✅ 全部 48 项通过（40 RV32UI + 8 RV32UM） |
+| 7 | ~~CoreMark 完整运行~~ | ✅ 通过，68923 cycles（100 iterations） |
+| 8 | ~~修复 BPU 非分支指令重定向 bug~~ | ✅ 详见 Bug Fix 4 |
+
 ### 待完成（仿真端）
 
 | # | 任务 | 说明 |
 |---|------|------|
-| 6 | riscv-tests 官方测试 | 运行官方指令集测试 |
-| 7 | 性能分析报告 | CPI、分支预测准确率、DMIPS/MHz 等量化数据 |
-| 8 | 代码注释率 | 验证并补充到 ≥30% |
-| 9 | 技术设计文档 | 生成完整 PDF 设计文档 |
+| 9 | 性能分析报告 | CPI、分支预测准确率、DMIPS/MHz 等量化数据 |
+| 10 | 代码注释率 | 验证并补充到 ≥30% |
+| 11 | 技术设计文档 | 生成完整 PDF 设计文档 |
 
 ---
 
@@ -128,7 +135,9 @@ wire div_starting = md_start_pulse_in & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_dat
 | test_div_simple.c | ✅ PASSED | 424 | C 语言 42/10 除法验证 |
 | matmul (app) | ✅ PASSED | 9368 | 4×4 矩阵乘法，UART 输出正确 |
 | test_printf.c | ⏳ 运行中 | >10M | printf 格式化输出，需更长仿真时间 |
-| CoreMark | ⏳ 运行中 | >10M | 简化 CoreMark，需更长仿真时间 |
+| CoreMark | ✅ PASSED | 68923 | 简化 CoreMark，100 iterations，67084 计时周期 |
+| **riscv-tests (rv32ui)** | ✅ 全部 PASSED | 110~1366 | 官方 40 项 RV32I 指令集测试 |
+| **riscv-tests (rv32um)** | ✅ 全部 PASSED | 365~592 | 官方 8 项 RV32M 乘除法测试 |
 
 ### VCD 波形文件
 
@@ -206,4 +215,86 @@ Cycle 33：div_starting=1 **错误抑制正确结果**
 
 ---
 
-*报告生成日期：2026-03-05*
+#### Bug Fix 4（已修复）：BPU 预测对非分支指令的错误 PC 重定向
+
+**文件**：`rtl/core/qxw_cpu_top.v`
+
+**现象**：运行官方 riscv-tests 时，`add` 等包含 bypass 测试的用例（使用 NOP 填充流水线）会在 NOP 指令处死循环。PC 停留在 NOP 地址不前进。
+
+**根本原因**：
+
+BPU 的 `bpu_pred_taken` 信号**未经分支指令类型过滤**就直接传入 PC 寄存器的 `pred_taken` 端口。当 BHT 表项因之前的分支指令训练为 "taken" 后，即使当前取指的是非分支指令（如 NOP），只要 PC 低位恰好命中同一 BHT 索引，`bpu_pred_taken` 也为 1，导致 PC 跳转到由 NOP 指令位字段解码出的垃圾 B-type 偏移量目标。
+
+而 IF 阶段虽然正确过滤了 `if_id_pred_taken`（要求 `is_branch & bpu_pred_taken`），EX 阶段的误预测检测也仅检查 `is_branch` 指令，因此 **非分支指令的 BPU 错误重定向永远不会被修正**。
+
+**修复**：
+
+在 PC 寄存器的 `pred_taken` 输入处增加 `is_branch` 过滤：
+
+```verilog
+// 修复前：
+.pred_taken(bpu_pred_taken & ~flush_if_id),
+
+// 修复后：
+wire if_is_branch = (imem_rdata[6:0] == `OPCODE_BRANCH);
+.pred_taken(if_is_branch & bpu_pred_taken & ~flush_if_id),
+```
+
+---
+
+## 5. 官方 riscv-tests 完整结果
+
+### RV32UI 测试（40 项全部通过）
+
+| 测试名称 | 结果 | 周期数 | 测试名称 | 结果 | 周期数 |
+|----------|------|--------|----------|------|--------|
+| simple | PASS | 110 | add | PASS | 596 |
+| addi | PASS | 337 | and | PASS | 614 |
+| andi | PASS | 293 | auipc | PASS | 133 |
+| beq | PASS | 438 | bge | PASS | 474 |
+| bgeu | PASS | 499 | blt | PASS | 438 |
+| bltu | PASS | 461 | bne | PASS | 442 |
+| jal | PASS | 130 | jalr | PASS | 216 |
+| lb | PASS | 387 | lbu | PASS | 387 |
+| lh | PASS | 403 | lhu | PASS | 412 |
+| lui | PASS | 136 | lw | PASS | 417 |
+| or | PASS | 619 | ori | PASS | 300 |
+| sb | PASS | 623 | sh | PASS | 712 |
+| sll | PASS | 620 | slli | PASS | 336 |
+| slt | PASS | 592 | slti | PASS | 332 |
+| sltiu | PASS | 332 | sltu | PASS | 592 |
+| sra | PASS | 641 | srai | PASS | 351 |
+| srl | PASS | 637 | srli | PASS | 345 |
+| sub | PASS | 588 | sw | PASS | 757 |
+| xor | PASS | 616 | xori | PASS | 302 |
+| ld_st | PASS | 1366 | st_ld | PASS | 737 |
+
+### RV32UM 测试（8 项全部通过）
+
+| 测试名称 | 结果 | 周期数 |
+|----------|------|--------|
+| mul | PASS | 592 |
+| mulh | PASS | 590 |
+| mulhsu | PASS | 590 |
+| mulhu | PASS | 590 |
+| div | PASS | 365 |
+| divu | PASS | 366 |
+| rem | PASS | 365 |
+| remu | PASS | 365 |
+
+---
+
+## 6. CoreMark 基准测试结果
+
+| 项目 | 值 |
+|------|-----|
+| 程序 | QXW 简化 CoreMark（矩阵乘法 + 链表 + 状态机） |
+| 迭代次数 | 100 |
+| 总计时周期 | 67,084 |
+| 仿真完成周期 | 68,923 |
+| 验证结果 | PASS（链表校验和 = 136，状态机计数 = 1000） |
+| UART 输出 | CoreMark matrix C[0][0]=1 |
+
+---
+
+*报告更新日期：2026-03-05*
