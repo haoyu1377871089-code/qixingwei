@@ -32,8 +32,12 @@ module tb_cpu_top;
     // 对应 DMEM word_addr = (0x3FF8 >> 2) = 0xFFE
     wire [31:0] tohost = u_soc.u_dmem.mem[12'hFFE];
 
-    // 最大仿真周期
+    // 最大仿真周期（可通过编译时 -DMAX_CYC=N 覆盖）
+`ifdef MAX_CYC
+    parameter MAX_CYCLES = `MAX_CYC;
+`else
     parameter MAX_CYCLES = 200_000;
+`endif
     integer cycle_cnt;
 
     // 复位 + 运行
