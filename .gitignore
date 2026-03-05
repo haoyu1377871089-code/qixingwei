@@ -1,0 +1,25 @@
+# 仿真产物
+*.vvp
+*.vcd
+*.hex
+*.log
+
+# Vivado 工程产物
+fpga/scripts/output/
+*.bit
+*.dcp
+*.jou
+*.str
+*.rpt
+
+# 编译产物
+sw/build/
+*.elf
+*.bin
+*.o
+*.d
+*.dis
+
+# 系统文件
+.DS_Store
+Thumbs.db
