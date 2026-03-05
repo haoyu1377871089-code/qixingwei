@@ -7,7 +7,7 @@ OBJCOPY = $(CROSS)objcopy
 OBJDUMP = $(CROSS)objdump
 
 # 编译选项：裸机、无标准库
-CFLAGS  = -march=rv32im -mabi=ilp32 -O2 -nostdlib -ffreestanding -Wall
+CFLAGS  = -march=rv32im -mabi=ilp32 -O2 -fno-jump-tables -nostdlib -ffreestanding -Wall
 LDFLAGS = -T ../linker.ld -nostdlib
 
 # 源文件路径（start.S 和 linker.ld 在上级目录）

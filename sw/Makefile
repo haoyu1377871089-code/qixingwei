@@ -10,7 +10,7 @@ OBJDUMP = $(CROSS)objdump
 
 # 编译选项
 ARCH    = -march=rv32im -mabi=ilp32
-CFLAGS  = $(ARCH) -O2 -Wall -nostdlib -ffreestanding -Ilib
+CFLAGS  = $(ARCH) -O2 -Wall -nostdlib -ffreestanding -fno-jump-tables -Ilib
 ASFLAGS = $(ARCH)
 LDFLAGS = -T linker.ld -nostdlib
 

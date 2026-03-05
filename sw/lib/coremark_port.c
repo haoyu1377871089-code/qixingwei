@@ -16,19 +16,20 @@
 #define SEED2 0
 #define SEED3 0
 
-/* 外部 vprintf 实现，用于可变参数透传 */
-extern int vprintf(const char *fmt, va_list ap);
+/* 外部 printf 实现 */
+extern int printf(const char *fmt, ...);
 
 /* 外部定时器读取，返回 64 位周期计数 */
 extern unsigned long long get_timer_value(void);
 
 /*
- * ee_printf: CoreMark 要求的打印接口，重定向到我们的 printf/vprintf
+ * ee_printf: CoreMark 要求的打印接口，直接使用 printf（避免 va_list 多层传递）
  */
 int ee_printf(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
+    extern int vprintf(const char *fmt, va_list ap);
     int ret = vprintf(fmt, ap);
     va_end(ap);
     return ret;

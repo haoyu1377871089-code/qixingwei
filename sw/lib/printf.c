@@ -83,61 +83,42 @@ static int vprintf_impl(const char *fmt, va_list ap)
             continue;
         }
         p++;
-        switch (*p) {
-        case 'c': {
-            int c = va_arg(ap, int);
-            putchar(c & 0xFF);
-            count++;
-            break;
-        }
-        case 's': {
-            const char *s = va_arg(ap, const char *);
-            if (!s) s = "(null)";
-            while (*s) {
-                putchar(*s++);
+        /* 使用 if-else 链代替 switch，避免编译器生成跳转表
+         * （跳转表存放在 .rodata → .data，Harvard 架构下
+         *  从 RAM 加载的代码地址可能导致间接跳转异常） */
+        {
+            char ch = *p;
+            if (ch == 'c') {
+                int c = va_arg(ap, int);
+                putchar(c & 0xFF);
                 count++;
-            }
-            break;
-        }
-        case 'd': {
-            int val = va_arg(ap, int);
-            int n = utoa_dec(buf, (unsigned int)val, 1);
-            int i;
-            for (i = 0; i < n; i++) {
-                putchar(buf[i]);
+            } else if (ch == 's') {
+                const char *s = va_arg(ap, const char *);
+                if (!s) s = "(null)";
+                while (*s) { putchar(*s++); count++; }
+            } else if (ch == 'd') {
+                int val = va_arg(ap, int);
+                int n = utoa_dec(buf, (unsigned int)val, 1);
+                int i;
+                for (i = 0; i < n; i++) { putchar(buf[i]); count++; }
+            } else if (ch == 'u') {
+                unsigned int val = va_arg(ap, unsigned int);
+                int n = utoa_dec(buf, val, 0);
+                int i;
+                for (i = 0; i < n; i++) { putchar(buf[i]); count++; }
+            } else if (ch == 'x') {
+                unsigned int val = va_arg(ap, unsigned int);
+                int n = utoa_hex(buf, val);
+                int i;
+                for (i = 0; i < n; i++) { putchar(buf[i]); count++; }
+            } else if (ch == '%') {
+                putchar('%');
                 count++;
+            } else {
+                putchar('%');
+                putchar(ch);
+                count += 2;
             }
-            break;
-        }
-        case 'u': {
-            unsigned int val = va_arg(ap, unsigned int);
-            int n = utoa_dec(buf, val, 0);
-            int i;
-            for (i = 0; i < n; i++) {
-                putchar(buf[i]);
-                count++;
-            }
-            break;
-        }
-        case 'x': {
-            unsigned int val = va_arg(ap, unsigned int);
-            int n = utoa_hex(buf, val);
-            int i;
-            for (i = 0; i < n; i++) {
-                putchar(buf[i]);
-                count++;
-            }
-            break;
-        }
-        case '%':
-            putchar('%');
-            count++;
-            break;
-        default:
-            putchar('%');
-            putchar(*p);
-            count += 2;
-            break;
         }
         p++;
     }

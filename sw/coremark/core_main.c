@@ -6,6 +6,10 @@
 
 #include "coremark_port.h"
 
+extern void putchar(int c);
+extern void puts(const char *s);
+extern void print_dec(unsigned int val);
+
 #define TOHOST_ADDR 0x00013FF8
 #define TOHOST (*(volatile unsigned int *)TOHOST_ADDR)
 
@@ -83,23 +87,35 @@ int main(void)
     unsigned long long t0 = get_timer_value();
     for (i = 0; i < ITERATIONS; i++)
         matrix_mul_4x4(A, B, C);
-    ee_printf("CoreMark matrix\n");
-    ee_printf("C[0][0]=%d\n", C[0][0]);
+    puts("CoreMark matrix");
+    putchar('C'); putchar('['); putchar('0'); putchar(']');
+    putchar('['); putchar('0'); putchar(']'); putchar('=');
+    print_dec((unsigned int)C[0][0]);
+    putchar('\n');
 
     /* 链表遍历 */
     unsigned int list_sum_val = list_sum();
-    ee_printf("list sum=%u\n", list_sum_val);
 
     /* 状态机 */
     unsigned int sm_count = state_machine_run(ITERATIONS * 10);
-    ee_printf("state machine count=%u\n", sm_count);
+
+    /* 验证结果 */
+    if (list_sum_val != 136 || sm_count != ITERATIONS * 10) {
+        puts("VERIFY FAIL");
+        TOHOST = 3;
+        while(1);
+    }
 
     /* 总耗时 = 矩阵运算 + 链表 + 状态机 */
     unsigned long long t2 = get_timer_value();
     unsigned long long total_cycles = t2 - t0;
 
-    ee_printf("iterations=%d\n", ITERATIONS);
-    ee_printf("total cycles=%u\n", (unsigned int)total_cycles);
+    puts("iterations:");
+    print_dec(ITERATIONS);
+    putchar('\n');
+    puts("total_cycles:");
+    print_dec((unsigned int)total_cycles);
+    putchar('\n');
 
     /* 通过 pass() 写 tohost（避免流水线时序问题） */
     extern void pass(void);
