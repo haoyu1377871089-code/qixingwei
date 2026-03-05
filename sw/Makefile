@@ -1,7 +1,7 @@
 # QXW RISC-V 软件构建 Makefile
 
 # 工具链前缀
-CROSS = riscv32-unknown-elf-
+CROSS = riscv64-unknown-elf-
 CC      = $(CROSS)gcc
 AS      = $(CROSS)as
 LD      = $(CROSS)ld
@@ -46,22 +46,19 @@ coremark: $(BUILD_DIR)/coremark.hex
 $(BUILD_DIR)/coremark.elf: start.S $(LIB_SRC) $(COREMARK_DIR)/core_main.c linker.ld | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ start.S $(LIB_SRC) $(COREMARK_DIR)/core_main.c -Wl,-T,linker.ld
 
-$(BUILD_DIR)/coremark.bin: $(BUILD_DIR)/coremark.elf
-	$(OBJCOPY) -O binary $< $@
 
 $(BUILD_DIR)/coremark.hex: $(BUILD_DIR)/coremark.elf
-	$(OBJCOPY) -O verilog $< $@
+	$(OBJCOPY) -O verilog $< $(BUILD_DIR)/coremark_bytes.hex
+	python3 byte2word.py $(BUILD_DIR)/coremark_bytes.hex $@
 	$(OBJDUMP) -d $< > $(BUILD_DIR)/coremark.dis
 
-# 通用规则：汇编测试 .S -> .elf -> .bin -> .hex
+# 通用规则：汇编测试 .S -> .elf -> .hex
 $(BUILD_DIR)/%.elf: $(TEST_DIR)/%.S start.S linker.ld | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ start.S $< -Wl,-T,linker.ld
 
-$(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf
-	$(OBJCOPY) -O binary $< $@
-
 $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf
-	$(OBJCOPY) -O verilog $< $@
+	$(OBJCOPY) -O verilog $< $(BUILD_DIR)/$*_bytes.hex
+	python3 byte2word.py $(BUILD_DIR)/$*_bytes.hex $@
 	$(OBJDUMP) -d $< > $(BUILD_DIR)/$*.dis
 
 $(BUILD_DIR):

@@ -1,7 +1,7 @@
 # QXW 应用构建 Makefile
 # 将 matmul 和 qsort 编译为 .hex 固件，供 SoC 测试台加载
 
-CROSS   = riscv32-unknown-elf-
+CROSS   = riscv64-unknown-elf-
 CC      = $(CROSS)gcc
 OBJCOPY = $(CROSS)objcopy
 OBJDUMP = $(CROSS)objdump
@@ -29,7 +29,8 @@ all: $(HEXS)
 	$(CC) $(CFLAGS) -o $@ $(START) $< $(LDFLAGS)
 
 %.hex: %.elf
-	$(OBJCOPY) -O verilog $< $@
+	$(OBJCOPY) -O verilog $< $(basename $<)_bytes.hex
+	python3 ../byte2word.py $(basename $<)_bytes.hex $@
 	$(OBJDUMP) -d $< > $(basename $<).dis
 
 clean:

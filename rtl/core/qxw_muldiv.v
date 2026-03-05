@@ -44,7 +44,8 @@ module qxw_muldiv (
     wire [31:0] abs_b = (op_b[31] && is_signed_d) ? (~op_b + 32'd1) : op_b;
 
     // restoring division: trial = shifted_remainder - divisor
-    wire [32:0] div_trial = {div_sr[62:31], 1'b0} - {1'b0, div_divisor};
+    // div_sr[62:31] 是左移一位后的余数（包含了下一位被除数）
+    wire [32:0] div_trial = {1'b0, div_sr[62:31]} - {1'b0, div_divisor};
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -69,6 +70,17 @@ module qxw_muldiv (
                 if (div_cnt == 6'd31) begin
                     div_running <= 1'b0;
                     div_done    <= 1'b1;
+                    if (!div_trial[32]) begin
+                        div_result_q <= div_neg_q ? (~{div_sr[30:0], 1'b1} + 32'd1)
+                                                  :  {div_sr[30:0], 1'b1};
+                        div_result_r <= div_neg_r ? (~div_trial[31:0] + 32'd1)
+                                                  :  div_trial[31:0];
+                    end else begin
+                        div_result_q <= div_neg_q ? (~{div_sr[30:0], 1'b0} + 32'd1)
+                                                  :  {div_sr[30:0], 1'b0};
+                        div_result_r <= div_neg_r ? (~div_sr[62:31] + 32'd1)
+                                                  :  div_sr[62:31];
+                    end
                 end
                 div_cnt <= div_cnt + 6'd1;
             end else if (start && is_div_op) begin
@@ -88,15 +100,6 @@ module qxw_muldiv (
         end
     end
 
-    // 除法完成时锁存修正后的结果
-    always @(posedge clk) begin
-        if (div_done && !div_running) begin
-            // 除以零的结果已直接写入，无需覆盖
-        end else if (div_done) begin
-            div_result_q <= div_neg_q ? (~div_sr[31:0]  + 32'd1) : div_sr[31:0];
-            div_result_r <= div_neg_r ? (~div_sr[63:32] + 32'd1) : div_sr[63:32];
-        end
-    end
 
     // ================================================================
     // valid 信号
@@ -113,18 +116,20 @@ module qxw_muldiv (
     end
 
     // ================================================================
-    // 结果选择
+    // 结果选择（除零时组合旁路，无需等待 NBA 更新 div_result_q/r）
     // ================================================================
+    wire div_by_zero = is_div_op & (op_b == 32'd0);
+
     always @(*) begin
         case (md_op)
             `MD_MUL:    result = mul_ss[31:0];
             `MD_MULH:   result = mul_ss[63:32];
             `MD_MULHSU: result = mul_su[63:32];
             `MD_MULHU:  result = mul_uu[63:32];
-            `MD_DIV:    result = div_result_q;
-            `MD_DIVU:   result = div_result_q;
-            `MD_REM:    result = div_result_r;
-            `MD_REMU:   result = div_result_r;
+            `MD_DIV:    result = div_by_zero ? 32'hFFFF_FFFF : div_result_q;
+            `MD_DIVU:   result = div_by_zero ? 32'hFFFF_FFFF : div_result_q;
+            `MD_REM:    result = div_by_zero ? op_a           : div_result_r;
+            `MD_REMU:   result = div_by_zero ? op_a           : div_result_r;
             default:    result = 32'd0;
         endcase
     end

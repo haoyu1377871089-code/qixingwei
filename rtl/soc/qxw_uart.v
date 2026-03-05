@@ -39,32 +39,41 @@ module qxw_uart #(
     // 发送状态机
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            uart_tx   <= 1'b1;  // idle = high
+            uart_tx   <= 1'b1;
             tx_busy   <= 1'b0;
             baud_cnt  <= 16'd0;
             bit_cnt   <= 4'd0;
             shift_reg <= 10'h3FF;
-        end else if (tx_busy) begin
-            if (baud_cnt == BAUD_DIV - 1) begin
-                baud_cnt <= 16'd0;
-                uart_tx  <= shift_reg[0];
-                shift_reg <= {1'b1, shift_reg[9:1]};
-                if (bit_cnt == 4'd9) begin
-                    tx_busy <= 1'b0;
-                    bit_cnt <= 4'd0;
-                end else begin
-                    bit_cnt <= bit_cnt + 4'd1;
-                end
-            end else begin
-                baud_cnt <= baud_cnt + 16'd1;
+        end else begin
+`ifdef SIMULATION
+            if (tx_busy) begin
+                tx_busy <= 1'b0;
+            end else if (en && we && addr == 8'h00) begin
+                tx_busy <= 1'b1;
             end
-        end else if (en && we && addr == 8'h00) begin
-            // 写 TX_DATA: 启动发送
-            shift_reg <= {1'b1, wdata[7:0], 1'b0};  // stop + data + start
-            tx_busy   <= 1'b1;
-            baud_cnt  <= 16'd0;
-            bit_cnt   <= 4'd0;
-            uart_tx   <= 1'b1;
+`else
+            if (tx_busy) begin
+                if (baud_cnt == BAUD_DIV - 1) begin
+                    baud_cnt <= 16'd0;
+                    uart_tx  <= shift_reg[0];
+                    shift_reg <= {1'b1, shift_reg[9:1]};
+                    if (bit_cnt == 4'd9) begin
+                        tx_busy <= 1'b0;
+                        bit_cnt <= 4'd0;
+                    end else begin
+                        bit_cnt <= bit_cnt + 4'd1;
+                    end
+                end else begin
+                    baud_cnt <= baud_cnt + 16'd1;
+                end
+            end else if (en && we && addr == 8'h00) begin
+                shift_reg <= {1'b1, wdata[7:0], 1'b0};
+                tx_busy   <= 1'b1;
+                baud_cnt  <= 16'd0;
+                bit_cnt   <= 4'd0;
+                uart_tx   <= 1'b1;
+            end
+`endif
         end
     end
 

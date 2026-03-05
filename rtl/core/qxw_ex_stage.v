@@ -94,6 +94,10 @@ module qxw_ex_stage (
     assign md_op_a  = fwd_rs1_data;
     assign md_op_b  = fwd_rs2_data;
 
+    // 非零除法启动检测：第一周期 div_result_q 尚为过时值，需插入气泡
+    // 除零走组合旁路，无需气泡
+    wire div_starting = md_start & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_data);
+
     // 执行结果选择
     wire [`XLEN_BUS] ex_result = id_ex_is_muldiv ? md_result : alu_result;
 
@@ -162,7 +166,7 @@ module qxw_ex_stage (
             ex_mem_alu_result <= ex_result;
             ex_mem_rs2_data   <= fwd_rs2_data;
             ex_mem_rd         <= id_ex_rd;
-            ex_mem_reg_we     <= id_ex_reg_we;
+            ex_mem_reg_we     <= id_ex_reg_we & !div_starting;
             ex_mem_mem_re     <= id_ex_mem_re;
             ex_mem_mem_we     <= id_ex_mem_we;
             ex_mem_funct3     <= id_ex_funct3;
@@ -171,7 +175,7 @@ module qxw_ex_stage (
             ex_mem_csr_op     <= id_ex_csr_op;
             ex_mem_csr_addr   <= id_ex_csr_addr;
             ex_mem_csr_wdata  <= csr_wdata_src;
-            ex_mem_valid      <= id_ex_valid;
+            ex_mem_valid      <= id_ex_valid & !div_starting;
         end
     end
 

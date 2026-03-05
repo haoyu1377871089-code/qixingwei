@@ -7,8 +7,12 @@ module qxw_imem #(
     parameter INIT_FILE = "firmware.hex"
 )(
     input  wire        clk,
+    // 指令端口（IF 阶段直连）
     input  wire [31:0] addr,
-    output wire [31:0] rdata
+    output wire [31:0] rdata,
+    // 数据端口（总线读 .rodata）
+    input  wire [31:0] daddr,
+    output wire [31:0] drdata
 );
 
     reg [31:0] mem [0:DEPTH-1];
@@ -17,8 +21,10 @@ module qxw_imem #(
         $readmemh(INIT_FILE, mem);
     end
 
-    wire [11:0] word_addr = addr[13:2];
+    wire [11:0] word_addr  = addr[13:2];
+    wire [11:0] dword_addr = daddr[13:2];
 
-    assign rdata = mem[word_addr];
+    assign rdata  = mem[word_addr];
+    assign drdata = mem[dword_addr];
 
 endmodule

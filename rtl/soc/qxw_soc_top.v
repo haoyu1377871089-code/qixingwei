@@ -64,14 +64,18 @@ module qxw_soc_top #(
     );
 
     // ================================================================
-    // 指令存储器（直连 CPU）
+    // 指令存储器（指令端口直连 CPU，数据端口经总线读 .rodata）
     // ================================================================
+    wire [31:0] imem_drdata;
+
     qxw_imem #(
         .INIT_FILE(IMEM_INIT_FILE)
     ) u_imem (
-        .clk  (clk),
-        .addr (cpu_imem_addr),
-        .rdata(cpu_imem_rdata)
+        .clk   (clk),
+        .addr  (cpu_imem_addr),
+        .rdata (cpu_imem_rdata),
+        .daddr (cpu_dmem_addr),
+        .drdata(imem_drdata)
     );
 
     // ================================================================
@@ -83,6 +87,7 @@ module qxw_soc_top #(
         .cpu_dmem_addr (cpu_dmem_addr),
         .cpu_dmem_wdata(cpu_dmem_wdata),
         .cpu_dmem_rdata(cpu_dmem_rdata),
+        .rom_rdata     (imem_drdata),
         .ram_en        (ram_en),
         .ram_we        (ram_we),
         .ram_addr      (ram_addr),

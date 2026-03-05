@@ -20,17 +20,14 @@ SECTIONS
         *(.text .text.*)
     } > ROM
 
-    /* 只读数据 -> ROM */
-    .rodata : {
-        *(.rodata .rodata.*)
-    } > ROM
-
-    /* data 段的加载地址在 ROM，运行地址在 RAM */
-    __data_load_start = LOADADDR(.data);
+    /* data + rodata 合并放入 RAM，加载地址在 ROM */
+    __data_load_start = .;
 
     .data : AT(__data_load_start) {
         __data_start = .;
+        *(.rodata .rodata.*)
         *(.data .data.*)
+        . = ALIGN(4);
         __data_end = .;
     } > RAM
 

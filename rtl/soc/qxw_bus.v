@@ -11,6 +11,9 @@ module qxw_bus (
     input  wire [31:0]       cpu_dmem_wdata,
     output reg  [31:0]       cpu_dmem_rdata,
 
+    // ROM 数据读端口（访问 .rodata 等只读数据）
+    input  wire [31:0]       rom_rdata,
+
     // 数据 RAM
     output wire              ram_en,
     output wire [3:0]        ram_we,
@@ -34,6 +37,7 @@ module qxw_bus (
 );
 
     // 地址译码
+    wire sel_rom   = (cpu_dmem_addr[31:16] == 16'h0000);   // 0x0000_xxxx (ROM)
     wire sel_ram   = (cpu_dmem_addr[31:16] == 16'h0001);   // 0x0001_xxxx
     wire sel_uart  = (cpu_dmem_addr[31:8]  == 24'h100000); // 0x1000_00xx
     wire sel_timer = (cpu_dmem_addr[31:8]  == 24'h100010); // 0x1000_10xx
@@ -58,7 +62,9 @@ module qxw_bus (
 
     // 读数据多路选择
     always @(*) begin
-        if (sel_ram)
+        if (sel_rom)
+            cpu_dmem_rdata = rom_rdata;
+        else if (sel_ram)
             cpu_dmem_rdata = ram_rdata;
         else if (sel_uart)
             cpu_dmem_rdata = uart_rdata;

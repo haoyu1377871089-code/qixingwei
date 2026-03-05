@@ -132,7 +132,20 @@ module qxw_cpu_top (
     wire [`REG_ADDR_BUS] id_rs2_for_hazard = if_id_inst[24:20];
 
     // BPU 预测目标（从 IF stage 内部计算）
-    wire [`XLEN_BUS] bpu_pred_target;  // 由 if_stage 内部计算
+    wire [`XLEN_BUS] bpu_pred_target;
+
+    // MulDiv 启动跟踪：防止 stall 解除后重复触发除法
+    reg md_started_r;
+    wire md_start_pulse = id_ex_is_muldiv & id_ex_valid & !md_busy & !md_started_r;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            md_started_r <= 1'b0;
+        else if (!stall_ex)
+            md_started_r <= 1'b0;
+        else if (md_start_pulse)
+            md_started_r <= 1'b1;
+    end
 
     // ================================================================
     // 模块实例化
@@ -278,7 +291,7 @@ module qxw_cpu_top (
     qxw_muldiv u_muldiv (
         .clk    (clk),
         .rst_n  (rst_n),
-        .start  (md_start),
+        .start  (md_start_pulse),
         .md_op  (md_op),
         .op_a   (md_op_a),
         .op_b   (md_op_b),

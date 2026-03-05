@@ -18,7 +18,7 @@ module qxw_hazard_ctrl (
     // 分支预测错误
     input  wire                 branch_mispredict,
 
-    // MulDiv 忙
+    // MulDiv 忙（含启动周期）
     input  wire                 md_busy,
 
     // 异常
@@ -44,7 +44,7 @@ module qxw_hazard_ctrl (
 
     assign stall_if  = pipeline_stall;
     assign stall_id  = pipeline_stall;
-    assign stall_ex  = md_busy;         // 只在 muldiv busy 时 stall EX
+    assign stall_ex  = md_busy;
     assign stall_mem = 1'b0;
 
     // flush 信号

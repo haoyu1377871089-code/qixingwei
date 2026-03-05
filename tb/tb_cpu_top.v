@@ -33,7 +33,7 @@ module tb_cpu_top;
     wire [31:0] tohost = u_soc.u_dmem.mem[12'hFFE];
 
     // 最大仿真周期
-    parameter MAX_CYCLES = 100_000;
+    parameter MAX_CYCLES = 2_000_000;
     integer cycle_cnt;
 
     // 复位 + 运行

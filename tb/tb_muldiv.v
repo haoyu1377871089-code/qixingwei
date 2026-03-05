@@ -80,14 +80,13 @@ module tb_muldiv;
         integer wait_cnt;
         begin
             start = 1;
-            @(posedge clk);
+            @(posedge clk); #1;
             start = 0;
             wait_cnt = 0;
             while (busy && wait_cnt < 50) begin
-                @(posedge clk);
+                @(posedge clk); #1;
                 wait_cnt = wait_cnt + 1;
             end
-            // 退出时处于 div_done 拍，采样 result（除法需 valid，此处仅验 result）
             if (result !== expected) begin
                 $display("FAIL: %0s | got=%08h exp=%08h", name, result, expected);
                 fail_cnt = fail_cnt + 1;
@@ -186,14 +185,14 @@ module tb_muldiv;
         md_op = `MD_DIV;
         op_a = 32'd100; op_b = 32'd7;
         start = 1;
-        @(posedge clk);
+        @(posedge clk); #1;
         start = 0;
         if (!busy) begin
             $display("FAIL: 除法启动后 busy 应变高");
             fail_cnt = fail_cnt + 1;
         end else
             pass_cnt = pass_cnt + 1;
-        repeat(35) @(posedge clk);  // 等待完成
+        repeat(35) @(posedge clk); #1;
         if (busy) begin
             $display("FAIL: 除法完成后 busy 应变低");
             fail_cnt = fail_cnt + 1;
