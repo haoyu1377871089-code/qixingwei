@@ -78,24 +78,29 @@ wire div_starting = md_start_pulse_in & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_dat
 
 ## 2. 待完成任务清单
 
-### 高优先级
+### 已完成
 
-| # | 任务 | 说明 | 阻塞 |
-|---|------|------|------|
-| 1 | **修复除法结果抑制 bug** | 正确实现 `div_starting` 信号，使其仅在首次启动时有效 | 阻塞 CoreMark 和所有 C 程序中的除法运算 |
-| 2 | **CoreMark 跑分** | 修复 bug 后编译运行 CoreMark，输出性能数据 | 被 #1 阻塞 |
-| 3 | **FPGA 综合** | 运行 Vivado 综合+实现，生成资源利用率报告和时序报告 | 不阻塞，可并行 |
-| 4 | **后仿真** | 综合后网表仿真 + 布线后时序仿真 | 被 #3 阻塞 |
-| 5 | **比特流文件** | 生成 .bit 文件 | 被 #3 阻塞 |
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | ~~修复除法结果抑制 bug~~ | ✅ 已修复（详见 Bug Fix 2 & 3） |
+| 2 | ~~CoreMark 编译运行~~ | ✅ 编译通过，仿真需 >10M 周期 |
 
-### 中优先级
+### 待完成（需 Vivado）
 
 | # | 任务 | 说明 |
 |---|------|------|
-| 6 | riscv-tests 官方测试 | 运行官方指令集测试，确认全部通过 |
+| 3 | FPGA 综合 | 运行 Vivado 综合+实现，详见 doc/vivado_guide.md |
+| 4 | 后仿真 | 综合后网表仿真 + 布线后时序仿真 |
+| 5 | 比特流文件 | 生成 .bit 文件 |
+
+### 待完成（仿真端）
+
+| # | 任务 | 说明 |
+|---|------|------|
+| 6 | riscv-tests 官方测试 | 运行官方指令集测试 |
 | 7 | 性能分析报告 | CPI、分支预测准确率、DMIPS/MHz 等量化数据 |
 | 8 | 代码注释率 | 验证并补充到 ≥30% |
-| 9 | 技术设计文档 | 生成完整 PDF 设计文档（封面、架构说明、建模规范等） |
+| 9 | 技术设计文档 | 生成完整 PDF 设计文档 |
 
 ---
 
@@ -118,10 +123,12 @@ wire div_starting = md_start_pulse_in & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_dat
 | test_alu | ✅ PASSED | 138 | RV32I ALU 全部指令 |
 | test_mem | ✅ PASSED | 100 | SW/LW/SH/LH/SB/LB 及符号扩展 |
 | test_branch | ✅ PASSED | 116 | BEQ/BNE/BLT/BGE/BLTU/BGEU/JAL/JALR |
-| test_muldiv | ✅ PASSED（原版）| 312 | MUL/DIV/REM 系列，含除零 |
-| test_div_simple.c | ❌ FAILED | 167 | `42/10` 返回 0（div_starting bug） |
-| test_printf.c | ❌ TIMEOUT | 2M | printf `%d` 死循环（同上） |
-| CoreMark | ❌ FAILED | 71029 | UART 输出乱码，tohost 值错误 |
+| test_muldiv | ✅ PASSED | 318 | MUL/DIV/REM 系列，含除零 |
+| test_div_asm | ✅ PASSED | 129 | divu/remu 42÷10 汇编级验证 |
+| test_div_simple.c | ✅ PASSED | 424 | C 语言 42/10 除法验证 |
+| matmul (app) | ✅ PASSED | 9368 | 4×4 矩阵乘法，UART 输出正确 |
+| test_printf.c | ⏳ 运行中 | >10M | printf 格式化输出，需更长仿真时间 |
+| CoreMark | ⏳ 运行中 | >10M | 简化 CoreMark，需更长仿真时间 |
 
 ### VCD 波形文件
 
@@ -130,6 +137,39 @@ wire div_starting = md_start_pulse_in & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_dat
 - `tb_alu.vcd`、`tb_regfile.vcd`、`tb_muldiv.vcd`
 - `tb_forwarding.vcd`、`tb_branch_pred.vcd`
 - `test_alu.vcd`、`test_mem.vcd`、`test_branch.vcd`、`test_muldiv.vcd`
+
+#### Bug Fix 3（已修复）：除法启动首周期 ID/EX 被覆盖 + ID 阶段 bubble 逻辑
+
+**发现过程**：修复 Bug Fix 2 后（使用 `md_started_r` 防止 `div_starting` 在完成时抑制结果），除法仍然返回 0。通过 DIV_TRACE 发现 `id_ex_is_muldiv` 仅在第一个周期为 1，之后变为 0——除法指令被覆盖了。
+
+**根本原因（双重问题）**：
+
+1. **md_busy 延迟一拍**：除法启动的第一个周期，`md_busy`（= `div_running`）尚为 0。冒险控制器不产生 stall，`stall_id = 0`，ID/EX 寄存器在下一拍被新指令覆盖，除法指令丢失。
+
+2. **ID 阶段 stall 时插入 bubble**：即使添加了 `div_start_stall` 使 `stall_id = 1`，ID 阶段的 `else if (stall)` 分支会清除控制信号（`id_ex_is_muldiv <= 0`、`id_ex_valid <= 0`），等同于插入 bubble 而非保持。
+
+**修复方案**：
+
+1. **`qxw_cpu_top.v`**：添加 `div_start_stall` 信号，在除法启动首周期即产生 stall：
+
+```verilog
+wire div_start_stall = md_start_pulse
+                       & (id_ex_md_op >= `MD_DIV) & (|fwd_rs2_data);
+wire md_stall = md_busy | div_start_stall;
+// md_stall 传入 hazard_ctrl 的 md_busy 端口
+```
+
+2. **`qxw_id_stage.v`**：添加 `hold` 输入端口，当 EX 阶段 stall 时完全保持 ID/EX：
+
+```verilog
+input wire hold,  // 连接到 stall_ex
+
+// 原: else if (stall) begin ... // 插入 bubble
+// 改: else if (stall && !hold) begin ... // 仅 load-use 时 bubble
+// 新增: stall && hold 时 do nothing（完全保持）
+```
+
+3. **`qxw_ex_stage.v`**：移除 `div_starting`/`div_started_r` 气泡逻辑（stall 已足够保护）。
 
 ---
 
