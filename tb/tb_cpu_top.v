@@ -75,6 +75,27 @@ module tb_cpu_top;
         $dumpvars(0, tb_cpu_top);
     end
 
+    // 监控所有 RAM 写入，最后 200 周期
+    `ifdef DEBUG_TRACE
+    reg [31:0] last_ram_writes [0:15];
+    reg [31:0] last_ram_addrs  [0:15];
+    reg [31:0] last_ram_pcs    [0:15];
+    integer wr_idx;
+    initial wr_idx = 0;
+    always @(posedge clk) begin
+        if (u_soc.u_bus.ram_en && (|u_soc.u_bus.ram_we) && u_soc.u_dmem.addr[13:2] >= 12'hFF0) begin
+            $display("[cyc %0d] RAM STORE: addr=%08h data=%08h we=%b ex_mem_pc=%08h ex_mem_valid=%b ex_mem_mem_we=%b fwd_rs2=%08h ex_mem_rs2=%08h",
+                     cycle_cnt, u_soc.u_dmem.addr, u_soc.u_dmem.wdata,
+                     u_soc.u_dmem.we,
+                     u_soc.u_cpu.ex_mem_pc,
+                     u_soc.u_cpu.u_ex_stage.ex_mem_valid,
+                     u_soc.u_cpu.u_ex_stage.ex_mem_mem_we,
+                     u_soc.u_cpu.u_forwarding.fwd_rs2_data,
+                     u_soc.u_cpu.u_ex_stage.ex_mem_rs2_data);
+        end
+    end
+    `endif
+
     // 定期打印 PC（调试用）
     `ifdef DEBUG_TRACE
     always @(posedge clk) begin

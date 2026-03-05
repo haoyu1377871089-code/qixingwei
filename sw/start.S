@@ -2,8 +2,8 @@
     .global _start
 
 _start:
-    # 初始化栈指针：数据 RAM 顶部 (0x0001_0000 + 16KB = 0x0001_4000)
-    li      sp, 0x00014000
+    # 初始化栈指针：tohost 之下 (0x0001_3FF8 保留给 tohost)
+    li      sp, 0x00013FF8
 
     # 清零 BSS 段
     la      t0, __bss_start

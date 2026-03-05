@@ -101,8 +101,8 @@ int main(void)
     ee_printf("iterations=%d\n", ITERATIONS);
     ee_printf("total cycles=%u\n", (unsigned int)total_cycles);
 
-    /* 写 tohost 表示测试通过，仿真器可检测 */
-    TOHOST = 1;
-
-    return 0;
+    /* 通过 pass() 写 tohost（避免流水线时序问题） */
+    extern void pass(void);
+    pass();
+    __builtin_unreachable();
 }
